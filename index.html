@@ -1,0 +1,930 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#1d6b57">
+<meta name="description" content="La araña de Multiserveis d'Aro: resume documentos, hace presupuestos y encuentra tiendas cercanas.">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="stylesheet" href="lib/leaflet.css">
+<script src="lib/leaflet.js"></script>
+<title>Araña de Multiserveis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500;12..96,700&family=Source+Sans+3:wght@400;600&family=JetBrains+Mono:wght@400;600&display=swap">
+<script src="lib/pdf.min.js"></script>
+<style>
+/* Layout: una herramienta de una columna con tres modos en pestañas; resultado debajo del formulario, en hoja aparte */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --ink:#17221f; --muted:#5d6b67; --line:#d5dcd9;
+  --accent:#1d6b57; --accent-ink:#ffffff; --accent-soft:#e1efe9; --mark:#b5620f; --danger:#a3312a;
+  --display:"Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
+  --body:"Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono:"JetBrains Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0f1513; --surface:#18211e; --ink:#e4ece9; --muted:#9aaaa5; --line:#2c3935;
+  --accent:#4fbf9c; --accent-ink:#0b1310; --accent-soft:#1d2f29; --mark:#e9a35a; --danger:#ef8a80; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0f1513; --surface:#18211e; --ink:#e4ece9; --muted:#9aaaa5; --line:#2c3935;
+  --accent:#4fbf9c; --accent-ink:#0b1310; --accent-soft:#1d2f29; --mark:#e9a35a; --danger:#ef8a80; color-scheme:dark}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--ink);font:16px/1.5 var(--body);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:20px 48px}
+.wrap{max-width:860px;margin:0 auto;display:flex;flex-direction:column;gap:20px}
+header h1{font:700 clamp(1.7rem,4vw,2.4rem)/1.1 var(--display);margin:0;letter-spacing:-.01em;text-wrap:balance}
+header .brand{font:600 .8rem var(--body);text-transform:uppercase;letter-spacing:.1em;color:var(--accent);margin-top:6px}
+header p{margin:6px 0 0;color:var(--muted);max-width:60ch}
+nav{display:flex;gap:6px;flex-wrap:wrap;border-bottom:1px solid var(--line)}
+nav a{font:600 .98rem var(--body);color:var(--muted);text-decoration:none;padding:10px 14px;border-bottom:3px solid transparent;margin-bottom:-1px}
+nav a[aria-current="page"]{color:var(--ink);border-color:var(--accent)}
+nav a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+section.mode{display:flex;flex-direction:column;gap:16px}
+.intro{color:var(--muted);margin:0;max-width:65ch}
+form{display:flex;flex-direction:column;gap:14px}
+.row{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:14px}
+label{display:flex;flex-direction:column;gap:5px;font-weight:600;font-size:.92rem;min-width:0}
+label small{font-weight:400;color:var(--muted)}
+input,textarea,select{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:9px 11px;width:100%;box-sizing:border-box}
+textarea{min-height:130px;resize:vertical}
+.drop{border:1.5px dashed var(--line);border-radius:8px;padding:14px;display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--surface)}
+.drop.over{border-color:var(--accent);background:var(--accent-soft)}
+.drop span{color:var(--muted);font-size:.92rem;flex:1;min-width:180px}
+.actions{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+button{font:600 .95rem var(--body);border-radius:6px;padding:10px 16px;cursor:pointer;border:1px solid var(--line);background:var(--surface);color:var(--ink)}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+button:disabled{opacity:.55;cursor:default}
+.status{font-size:.92rem;color:var(--muted)}
+.status.err{color:var(--danger)}
+.sheet{background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.sheet h2{font:700 1.25rem/1.2 var(--display);margin:0}
+.sheet h3{font:600 .78rem var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--muted);margin:0 0 6px}
+.tag{display:inline-block;font:600 .72rem var(--body);text-transform:uppercase;letter-spacing:.08em;color:var(--mark);border:1px solid currentColor;border-radius:4px;padding:1px 6px;vertical-align:middle}
+.sheet ul{margin:0;padding-left:20px}
+.sheet li{margin:3px 0}
+dl.kv{display:grid;grid-template-columns:minmax(110px,max-content) 1fr;gap:6px 16px;margin:0}
+dl.kv dt{color:var(--muted)} dl.kv dd{margin:0;min-width:0;overflow-wrap:anywhere}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th{font:600 .78rem var(--body);text-transform:uppercase;letter-spacing:.06em;color:var(--muted);text-align:left;padding:6px 8px;border-bottom:1px solid var(--line)}
+td{padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+td input{padding:5px 7px}
+td.num,th.num{text-align:right;font-family:var(--mono);white-space:nowrap}
+td input.n{width:90px;text-align:right;font-family:var(--mono)}
+td input.c{min-width:180px}
+.totals{display:grid;grid-template-columns:1fr auto;gap:4px 24px;margin-left:auto;font-variant-numeric:tabular-nums;min-width:240px}
+.totals .v{font-family:var(--mono);text-align:right}
+.totals .big{font:700 1.2rem var(--display)}
+.totals .bigv{font:600 1.2rem var(--mono);text-align:right}
+.shop{border-top:1px solid var(--line);padding-top:12px;display:flex;flex-direction:column;gap:8px}
+.shop:first-of-type{border-top:0;padding-top:0}
+.shop h4{margin:0;font:700 1.05rem var(--display)}
+.shop .kind{color:var(--muted);font-size:.92rem}
+.stores{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.stores li{display:flex;gap:10px;flex-wrap:wrap;align-items:baseline}
+.stores a{color:var(--accent);font-weight:600}
+.stores .why{color:var(--muted);font-size:.93rem;flex:1;min-width:200px}
+.note{font-size:.88rem;color:var(--muted);margin:0}
+.del{border:0;background:none;color:var(--muted);padding:4px 8px;font-size:1.1rem}
+@media (max-width:560px){
+  body{padding-block:12px 32px}
+  nav{position:sticky;top:env(safe-area-inset-top,0px);background:var(--bg);z-index:5;flex-wrap:nowrap}
+  nav a{flex:1;text-align:center;padding:12px 4px;font-size:.88rem}
+  input,textarea,select{font-size:16px;padding:11px 12px}
+  .actions button{flex:1;min-height:46px}
+  .sheet{padding:16px}
+  .totals{min-width:0;width:100%}
+}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:fade .25s ease-out}}
+#spider{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:20}
+#bubble{position:fixed;left:0;top:0;z-index:21;max-width:min(260px,70vw);background:var(--surface);color:var(--ink);border:1px solid var(--line);border-radius:10px;padding:7px 11px;font:600 .88rem/1.3 var(--body);box-shadow:0 4px 14px rgb(0 0 0 / .12);pointer-events:none}
+.crumb{position:fixed;z-index:19;font:600 .8rem var(--mono);background:var(--accent-soft);color:var(--accent);border:1px solid var(--accent);border-radius:999px;padding:2px 9px;pointer-events:none;white-space:nowrap;transition:transform .35s ease-in,opacity .35s ease-in}
+.crumb.eaten{transform:scale(.2);opacity:0}
+.q{display:flex;flex-direction:column;gap:8px}
+.q code{font:.85rem var(--mono);background:var(--bg);border:1px solid var(--line);border-radius:6px;padding:6px 9px;overflow-wrap:anywhere;user-select:all}
+.maps{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.maps a{font:600 .9rem var(--body);color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:8px 12px;text-decoration:none;background:var(--surface)}
+.maps button{padding:8px 12px}
+#map{height:min(55vh,420px);border-radius:8px;border:1px solid var(--line);z-index:1}
+.shoplist{list-style:none;margin:0;padding:0;display:flex;flex-direction:column}
+.shoplist li{padding:10px 0;border-top:1px solid var(--line);display:flex;flex-direction:column;gap:4px;cursor:pointer}
+.shoplist li:first-child{border-top:0}
+.sh-top{display:flex;justify-content:space-between;gap:10px;align-items:baseline}
+.dist{font:600 .85rem var(--mono);color:var(--accent);white-space:nowrap}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font:600 .82rem var(--mono);background:var(--accent-soft);color:var(--accent);border-radius:999px;padding:2px 10px}
+.leaflet-popup-content{font:14px/1.4 var(--body)}
+.linkish{border:0;background:none;padding:0;color:var(--accent);font:600 .92rem var(--body);text-decoration:underline;cursor:pointer}
+.tarifa summary{cursor:pointer;list-style-position:inside}
+.tarifa[open] summary{margin-bottom:6px}
+.sheet.delivered{box-shadow:0 0 0 2px var(--accent)}
+header{padding-right:150px}
+@media (max-width:560px){header{padding-right:96px}}
+@keyframes fade{from{opacity:.4;transform:translateY(4px)}to{opacity:1;transform:none}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+body{margin:0}
+img{max-width:100%}
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <h1>Araña de información</h1>
+    <div class="brand">Multiserveis d'Aro · Costa Brava</div>
+    <p>Dale a la araña un documento, unas notas o tu lista de la compra. Ella lo recorre, recoge lo importante y te lo trae. Funciona sin cuenta y lo que escribes no sale de tu móvil.</p>
+  </header>
+
+  <nav aria-label="Modos">
+    <a href="#resumen" data-mode="resumen">Documentos</a>
+    <a href="#presupuesto" data-mode="presupuesto">Presupuestos</a>
+    <a href="#tiendas" data-mode="tiendas">Tiendas</a>
+  </nav>
+
+  <!-- MODO 1 -->
+  <section class="mode" id="m-resumen">
+    <p class="intro">Pega un texto o sube un PDF. La araña busca las fechas, los importes, las personas y empresas, los teléfonos y correos, y lo que hay que hacer.</p>
+    <form id="f-resumen">
+      <div class="drop" id="drop">
+        <input type="file" id="r-file" accept=".pdf,.txt,.md,.csv,.html,.eml" hidden>
+        <button type="button" id="r-pick">Elegir archivo</button>
+        <span id="r-fname">¿Es un papel? Hazle una foto, copia el texto con la cámara del móvil (Google Lens o Texto en vivo) y pégalo abajo.</span>
+      </div>
+      <label for="r-text">Texto del documento <small>Si subes un archivo de texto o PDF, su contenido aparece aquí y puedes editarlo.</small>
+        <textarea id="r-text">Correo de la comunidad de propietarios Edifici Mar Blau (Platja d'Aro), 27 de octubre de 2026: Os pedimos presupuesto para el mantenimiento de las zonas comunes de noviembre a marzo. Limpieza de escalera y portal dos veces por semana, cuidado del jardín y poda de los setos una vez al mes, y revisión de la piscina antes de cerrarla el 15 de noviembre. También hay una gotera en el garaje que habría que mirar cuanto antes. La junta se reúne el 10 de noviembre y nos gustaría tener el presupuesto antes del 5. Contacto: Marta Puig, presidenta.</textarea>
+      </label>
+      <div class="actions">
+        <button class="primary" id="r-go">Buscar lo importante</button>
+        <span class="status" id="r-status"></span>
+      </div>
+    </form>
+    <div id="r-out"></div>
+  </section>
+
+  <!-- MODO 2 -->
+  <section class="mode" id="m-presupuesto" hidden>
+    <p class="intro">Describe el trabajo con tus palabras, poniendo metros, horas o visitas si los sabes. La araña busca los servicios en la tarifa de la empresa y monta el presupuesto. Puedes cambiar cualquier línea antes de copiarlo.</p>
+    <form id="f-pres">
+      <div class="row">
+        <label for="p-emisor">Tu empresa o nombre<input id="p-emisor" value="Multiserveis d'Aro"></label>
+        <label for="p-cliente">Cliente<input id="p-cliente" value="Comunitat Edifici Mar Blau"></label>
+        
+      </div>
+      <label for="p-desc">Qué hay que hacer
+        <textarea id="p-desc">Pintar un apartamento de 60 m2 en Platja d'Aro antes de la temporada: salón, dos habitaciones y la terraza. Paredes en blanco y techos. Tapar algunas grietas (unas 3 horas) y proteger los muebles.</textarea>
+      </label>
+      <div class="row">
+        <label for="p-iva">IVA
+          <select id="p-iva"><option value="21" selected>21 %</option><option value="10">10 % (reforma de vivienda)</option><option value="4">4 %</option><option value="0">Sin IVA</option></select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="p-go">Hacer presupuesto</button>
+        <span class="status" id="p-status"></span>
+      </div>
+    </form>
+    <div id="p-out"></div>
+    <details class="sheet tarifa">
+      <summary><strong>Tarifa de precios</strong> <span class="note">· la araña saca los precios de aquí</span></summary>
+      <p class="note">Cada servicio tiene palabras clave: si aparecen en la descripción, se añade al presupuesto. Pon un asterisco (*) para que salga siempre. Los cambios se guardan en este móvil.</p>
+      <div class="tablewrap"><table><thead><tr><th>Servicio</th><th>Palabras clave</th><th>Ud.</th><th class="num">Precio €</th><th></th></tr></thead><tbody id="tarifa-rows"></tbody></table></div>
+      <div class="actions"><button type="button" id="tarifa-add">Añadir servicio</button><button type="button" id="tarifa-reset">Volver a la tarifa original</button><span class="status" id="tarifa-st"></span></div>
+    </details>
+  </section>
+
+  <!-- MODO 3 -->
+  <section class="mode" id="m-tiendas" hidden>
+    <p class="intro">Escribe lo que necesitas y la araña busca en el mapa las tiendas cercanas que lo venden. Toca una tienda para ver la dirección, el horario y cómo llegar.</p>
+    <form id="f-tiendas">
+      <label for="t-prod">Qué necesitas<input id="t-prod" value="Cloro para piscina"></label>
+      <div class="row">
+        <label for="t-zona">Dónde <small>Pueblo, barrio o código postal</small><input id="t-zona" value="Platja d'Aro"></label>
+        <label for="t-radio">Distancia
+          <select id="t-radio"><option value="3000">Hasta 3 km</option><option value="8000" selected>Hasta 8 km</option><option value="20000">Hasta 20 km</option></select>
+        </label>
+      </div>
+      <div class="actions">
+        <button class="primary" id="t-go">Buscar tiendas</button>
+        <button type="button" id="t-gps">Usar mi ubicación</button>
+        <span class="status" id="t-status"></span>
+      </div>
+    </form>
+    <article class="sheet" id="t-res">
+      <div id="t-head"><h2>Tiendas cerca</h2><p class="note">Pulsa «Buscar tiendas» y aparecerán en el mapa.</p></div>
+      <div id="map" aria-label="Mapa de tiendas"></div>
+      <ol id="t-lista" class="shoplist"></ol>
+      <div><h3>Buscar el producto en internet</h3><div class="maps" id="t-web"></div></div>
+    </article>
+  </section>
+</div>
+<canvas id="spider" aria-hidden="true"></canvas>
+<div id="bubble" role="status" hidden></div>
+
+<script>
+/* ---------- la araña ---------- */
+const Spider = (() => {
+  const cv = document.getElementById("spider"), ctx = cv.getContext("2d");
+  const bubble = document.getElementById("bubble");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let W = 0, H = 0, dpr = 1, s = 1, col = {};
+  function readColors(){
+    const cs = getComputedStyle(document.documentElement);
+    for (const k of ["ink","line","mark","accent","surface","bg"]) col[k] = cs.getPropertyValue("--"+k).trim();
+  }
+  function resize(){
+    dpr = devicePixelRatio || 1; W = innerWidth; H = innerHeight;
+    cv.width = W*dpr; cv.height = H*dpr; s = W < 560 ? 0.72 : 1;
+  }
+  resize(); readColors();
+  addEventListener("resize", resize);
+  matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", readColors);
+  new MutationObserver(readColors).observe(document.documentElement, {attributes:true, attributeFilter:["data-theme"]});
+
+  const home = () => ({x: W - (W < 560 ? 58 : 96), y: W < 560 ? 62 : 92});
+  const webR = () => (W < 560 ? 52 : 82);
+  const b = {...home(), h: Math.PI/2, vx: 0, vy: 0};
+  let target = null, arrive = null, atHome = true, carried = 0;
+
+  // patas: ángulo respecto a la cabeza, por lado
+  const ANG = [0.55, 1.15, 1.95, 2.55];
+  const legs = [];
+  for (const side of [1,-1]) ANG.forEach((a,i) => legs.push({side, a, i, foot:null, from:null, to:null, t:1, group:(i + (side>0?0:1)) % 2}));
+  const R = () => 36*s;
+  function ideal(l){
+    const ang = b.h + l.side*l.a;
+    return {x: b.x + Math.cos(ang)*R() + b.vx*7, y: b.y + Math.sin(ang)*R() + b.vy*7};
+  }
+  legs.forEach(l => l.foot = ideal(l));
+
+  function clampPt(p){ return {x: Math.max(28, Math.min(W-28, p.x)), y: Math.max(28, Math.min(H-28, p.y))}; }
+  function goTo(t){
+    target = t; atHome = false;
+    return new Promise(res => { arrive = res; });
+  }
+  function goHome(){ return goTo(home).then(() => { atHome = true; }); }
+
+  let sayTimer;
+  function say(text, ms = 2600){
+    bubble.textContent = text; bubble.hidden = false;
+    clearTimeout(sayTimer);
+    if (ms) sayTimer = setTimeout(() => { bubble.hidden = true; }, ms);
+  }
+
+  function step(){
+    // movimiento
+    if (target){
+      const t = clampPt(typeof target === "function" ? target() : target);
+      const dx = t.x - b.x, dy = t.y - b.y, d = Math.hypot(dx, dy);
+      const max = (reduce ? 2.2 : 4.2) * (W < 560 ? 0.85 : 1);
+      const sp = Math.min(max, d*0.09);
+      if (d < 3){ b.vx = b.vy = 0; target = null; const r = arrive; arrive = null; r && r(); }
+      else {
+        b.vx += (dx/d*sp - b.vx)*0.25; b.vy += (dy/d*sp - b.vy)*0.25;
+        b.x += b.vx; b.y += b.vy;
+        const want = Math.atan2(b.vy, b.vx);
+        let da = want - b.h; while (da > Math.PI) da -= 2*Math.PI; while (da < -Math.PI) da += 2*Math.PI;
+        b.h += da*0.18;
+      }
+    } else {
+      b.vx *= 0.8; b.vy *= 0.8;
+      if (atHome){ const hp = home(); b.x += (hp.x-b.x)*0.1; b.y += (hp.y-b.y)*0.1; }
+    }
+    // pasos: una pata se mueve si está lejos y su grupo toca
+    for (const l of legs){
+      if (l.t < 1){
+        l.t = Math.min(1, l.t + 0.2);
+        const e = l.t < .5 ? 2*l.t*l.t : 1 - Math.pow(-2*l.t+2, 2)/2;
+        l.foot = {x: l.from.x + (l.to.x-l.from.x)*e, y: l.from.y + (l.to.y-l.from.y)*e - Math.sin(l.t*Math.PI)*5*s};
+      }
+    }
+    // marcha alterna: cuando ninguna pata está en el aire, levanta el grupo que más lo necesita
+    const err = l => { const id = ideal(l); return Math.hypot(id.x-l.foot.x, id.y-l.foot.y); };
+    if (!legs.some(l => l.t < 1)){
+      const need = [0,1].map(g => legs.filter(l => l.group === g).reduce((m,l) => Math.max(m, err(l)), 0));
+      const g = need[0] >= need[1] ? 0 : 1;
+      if (need[g] > R()*0.45) for (const l of legs) if (l.group === g){ l.from = {...l.foot}; l.to = ideal(l); l.t = 0; }
+    }
+    for (const l of legs) if (l.t >= 1 && err(l) > R()*1.6){ l.from = {...l.foot}; l.to = ideal(l); l.t = 0; }
+    bubble.style.transform = `translate(${Math.round(Math.min(W-bubble.offsetWidth-12, Math.max(12, b.x - bubble.offsetWidth/2)))}px, ${Math.round(b.y < 120 ? b.y + 34*s : b.y - 46*s - bubble.offsetHeight + 20)}px)`;
+  }
+
+  function drawWeb(){
+    const c = home(), r = webR(), n = 10;
+    ctx.strokeStyle = col.line; ctx.lineWidth = 1;
+    ctx.beginPath();
+    for (let i = 0; i < n; i++){ const a = i/n*Math.PI*2; ctx.moveTo(c.x, c.y); ctx.lineTo(c.x + Math.cos(a)*r*1.15, c.y + Math.sin(a)*r*1.15); }
+    for (let k = 1; k <= 5; k++){
+      const rr = r*k/5;
+      for (let i = 0; i <= n; i++){ const a = i/n*Math.PI*2, wob = rr*(1 - 0.06*Math.sin(i*1.7)); const x = c.x + Math.cos(a)*wob, y = c.y + Math.sin(a)*wob; i ? ctx.lineTo(x,y) : ctx.moveTo(x,y); }
+    }
+    ctx.stroke();
+  }
+
+  function drawSpider(){
+    // hilo de seda desde la telaraña
+    const c = home();
+    if (Math.hypot(b.x-c.x, b.y-c.y) > 8){
+      ctx.strokeStyle = col.ink; ctx.globalAlpha = .28; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(c.x, c.y); ctx.lineTo(b.x, b.y); ctx.stroke(); ctx.globalAlpha = 1;
+    }
+    // patas
+    ctx.strokeStyle = col.ink; ctx.lineCap = "round"; ctx.lineJoin = "round"; ctx.lineWidth = 2.2*s;
+    for (const l of legs){
+      const ang = b.h + l.side*l.a;
+      const hip = {x: b.x + Math.cos(ang)*5*s, y: b.y + Math.sin(ang)*5*s};
+      const f = l.foot, dx = f.x-hip.x, dy = f.y-hip.y, d = Math.hypot(dx,dy) || 1;
+      const L = R()*0.62, lift = Math.sqrt(Math.max(0, L*L - (d/2)*(d/2))) + 6*s;
+      let nx = -dy/d, ny = dx/d;
+      const mx = (hip.x+f.x)/2, my = (hip.y+f.y)/2;
+      if ((mx+nx-b.x)**2 + (my+ny-b.y)**2 < (mx-nx-b.x)**2 + (my-ny-b.y)**2){ nx = -nx; ny = -ny; }
+      ctx.beginPath(); ctx.moveTo(hip.x, hip.y); ctx.lineTo(mx + nx*lift, my + ny*lift); ctx.lineTo(f.x, f.y); ctx.stroke();
+    }
+    // cuerpo
+    const cx = Math.cos(b.h), sy = Math.sin(b.h);
+    const ab = {x: b.x - cx*13*s, y: b.y - sy*13*s};
+    ctx.fillStyle = col.ink;
+    ctx.save(); ctx.translate(ab.x, ab.y); ctx.rotate(b.h);
+    ctx.beginPath(); ctx.ellipse(0, 0, 14*s, 11*s, 0, 0, Math.PI*2); ctx.fill();
+    // marca del abdomen y lo que lleva recogido
+    ctx.fillStyle = col.mark;
+    ctx.beginPath(); ctx.ellipse(-2*s, 0, 4.5*s, 2.6*s, 0, 0, Math.PI*2); ctx.fill();
+    for (let i = 0; i < Math.min(carried, 6); i++){ ctx.beginPath(); ctx.arc(-8*s + i*2.6*s, (i%2?-5:5)*s, 1.4*s, 0, Math.PI*2); ctx.fill(); }
+    ctx.restore();
+    ctx.fillStyle = col.ink;
+    ctx.beginPath(); ctx.arc(b.x + cx*3*s, b.y + sy*3*s, 8*s, 0, Math.PI*2); ctx.fill();
+    // ojos
+    ctx.fillStyle = col.surface;
+    for (const side of [1,-1]){
+      const ex = b.x + cx*8*s - sy*side*3.2*s, ey = b.y + sy*8*s + cx*side*3.2*s;
+      ctx.beginPath(); ctx.arc(ex, ey, 1.9*s, 0, Math.PI*2); ctx.fill();
+    }
+  }
+
+  function frame(){
+    step();
+    ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,W,H);
+    drawWeb(); drawSpider();
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+
+  /* --- recoger información --- */
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  function pickWords(text){
+    const all = (text.match(/[\p{L}\d][\p{L}\d.,€%'’/-]{3,}/gu) || []).map(w => w.replace(/[.,]+$/,""));
+    const score = w => (/\d/.test(w) ? 3 : 0) + (/^\p{Lu}/u.test(w) ? 2 : 0) + Math.min(w.length, 10)/10;
+    const uniq = [...new Set(all)].sort((a,b) => score(b) - score(a));
+    return uniq.slice(0, 6);
+  }
+  function visibleRect(el){
+    const r = el.getBoundingClientRect();
+    return {l: Math.max(30, r.left+10), r: Math.min(W-30, r.right-10), t: Math.max(60, r.top+10), b: Math.min(H-30, r.bottom-10)};
+  }
+  const rand = (a,b) => a + Math.random()*Math.max(0, b-a);
+  let job = 0;
+
+  async function work(text, src, promise){
+    const my = ++job; let done = false;
+    promise.then(() => done = true, () => done = true);
+    carried = 0;
+    src.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "center"});
+    await sleep(350);
+    const words = Array.isArray(text) ? text.filter(Boolean).slice(0, 7) : pickWords(text);
+    if (!words.length) words.push("datos","fechas","importes");
+    say("Voy a recorrer lo que me has dado…", 0);
+    await sleep(500);
+    const vr = visibleRect(src);
+    const crumbs = words.map(w => {
+      const el = document.createElement("span"); el.className = "crumb"; el.textContent = w;
+      el.style.left = rand(vr.l, vr.r - 90) + "px"; el.style.top = rand(vr.t, vr.b - 24) + "px";
+      document.body.append(el); return el;
+    });
+    for (const el of crumbs){
+      if (my !== job) break;
+      await goTo(() => { const r = el.getBoundingClientRect(); return {x: r.left + r.width/2, y: r.top + r.height/2}; });
+      el.classList.add("eaten"); carried++;
+      say(`Recogido: ${el.textContent}`, 0);
+      setTimeout(() => el.remove(), 400);
+    }
+    crumbs.forEach(el => setTimeout(() => el.remove(), 500));
+    const lines = ["Ordenando lo importante…","Tejiendo el resultado…","Ya casi lo tengo…"];
+    let i = 0;
+    while (!done && my === job){
+      say(lines[i++ % lines.length], 0);
+      const v = visibleRect(src);
+      await goTo({x: rand(v.l, v.r), y: rand(v.t, v.b)});
+      await sleep(250);
+    }
+  }
+
+  async function deliver(out, msg){
+    const my = ++job;
+    out.scrollIntoView({behavior: reduce ? "auto" : "smooth", block: "start"});
+    await sleep(450);
+    if (my !== job) return;
+    await goTo(() => { const r = out.getBoundingClientRect(); return {x: r.left + Math.min(60, r.width/2), y: r.top + 24}; });
+    out.querySelector(".sheet")?.classList.add("delivered");
+    carried = 0;
+    say(msg || "¡Aquí tienes lo importante!", 3200);
+    await sleep(3200);
+    if (my === job) goHome();
+  }
+
+  function fail(code){
+    ++job; carried = 0;
+    document.querySelectorAll(".crumb").forEach(el => el.remove());
+    say(code === "cancelled" ? "Vale, paro." : "Uy, no he podido. Mira el aviso.", 3000);
+    goHome();
+  }
+
+  /* --- tocar la pantalla --- */
+  const quips = ["¿Me necesitas? Dame un documento.", "Aquí estoy, recogiendo información.", "Puedo leer fotos de papeles.", "Suelta un archivo encima de la página."];
+  addEventListener("pointerdown", e => {
+    if (e.target.closest("input,textarea,select,button,a,label,table,.sheet,details,#map,.leaflet-container")) return;
+    if (Math.hypot(e.clientX-b.x, e.clientY-b.y) < 34*s){ say(quips[Math.floor(Math.random()*quips.length)]); return; }
+    const my = ++job;
+    goTo({x: e.clientX, y: e.clientY}).then(() => sleep(1800)).then(() => { if (my === job) goHome(); });
+  });
+  addEventListener("dragover", e => { e.preventDefault(); target = {x: e.clientX, y: e.clientY}; atHome = false; });
+
+  setTimeout(() => say("¡Hola! Soy la araña de Multiserveis d'Aro. Dame un documento y te traigo lo importante.", 4500), 600);
+  return {work, deliver, fail, say, goHome, get busy(){ return !!target; }};
+})();
+</script>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const eur = n => (Number(n)||0).toLocaleString("es-ES",{style:"currency",currency:"EUR"});
+const store = {
+  get(k, d){ try{ const v = localStorage.getItem(k); return v ? JSON.parse(v) : d; }catch{ return d; } },
+  set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)); }catch{} }
+};
+
+/* ---------- pestañas ---------- */
+const MODES = ["resumen","presupuesto","tiendas"];
+function route(){
+  const m = MODES.includes(location.hash.slice(1)) ? location.hash.slice(1) : "resumen";
+  MODES.forEach(k => { $("#m-"+k).hidden = k !== m; });
+  if(m === "tiendas") setTimeout(() => { iniciarMapa(); map && map.invalidateSize(); }, 60);
+  document.querySelectorAll("nav a").forEach(a => {
+    if(a.dataset.mode === m) a.setAttribute("aria-current","page"); else a.removeAttribute("aria-current");
+  });
+}
+addEventListener("hashchange", route);
+
+/* ---------- utilidades de texto ---------- */
+const MESES = ["enero","febrero","marzo","abril","mayo","junio","julio","agosto","septiembre","octubre","noviembre","diciembre"];
+const MES_CA = ["gener","febrer","març","abril","maig","juny","juliol","agost","setembre","octubre","novembre","desembre"];
+const STOP = new Set(("de la que el en y a los del se las por un para con no una su al lo como más pero sus le ya o este sí porque esta entre cuando muy sin sobre también me hasta hay donde quien desde todo nos durante todos uno les ni contra otros ese eso ante ellos e esto mí antes algunos qué unos yo otro otras otra él tanto esa estos mucho quienes nada muchos cual poco ella estar estas algunas algo nosotros mi mis tú te ti tu tus ellas nosotras vosotros vosotras os mío mía tuyo suyo nuestro vuestro esos esas estoy está estamos están ser es son fue era sido tiene tienen tener hace hacer puede pueden debe os el la i les els per amb que del dels una un").split(" "));
+function sentences(t){
+  return t.replace(/\s+/g," ").split(/(?<=[.!?;:])\s+(?=[A-ZÁÉÍÓÚÑÀÈÒÇ0-9¿¡"])/u).map(s=>s.trim()).filter(s=>s.length>2);
+}
+function sentenceOf(text, idx){
+  const before = text.lastIndexOf(".", idx-1), nl = text.lastIndexOf("\n", idx-1);
+  const start = Math.max(before, nl) + 1;
+  let end = text.slice(idx).search(/[.\n]/); end = end < 0 ? text.length : idx + end;
+  let s = text.slice(start, end).replace(/\s+/g," ").trim();
+  return s.length > 110 ? s.slice(0,107) + "…" : s;
+}
+function uniqBy(arr, key){ const seen = new Set(); return arr.filter(x => { const k = key(x); if(seen.has(k)) return false; seen.add(k); return true; }); }
+
+/* ---------- MODO 1: la araña lee el documento ---------- */
+function analizar(text){
+  const out = {fechas:[], importes:[], contactos:[], nombres:[], acciones:[], resumen:"", titulo:"Documento"};
+  let m;
+  // fechas
+  const reNum = /\b(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})\b/g;
+  while((m = reNum.exec(text))) if(+m[2] >= 1 && +m[2] <= 12) out.fechas.push({fecha:m[0], que:sentenceOf(text, m.index), i:m.index});
+  const reTxt = new RegExp(`\\b(\\d{1,2})\\s+(?:de\\s+|d['’])?(${MESES.concat(MES_CA).join("|")})(?:\\s+(?:de(?:l)?\\s+)?(\\d{4}))?`, "gi");
+  while((m = reTxt.exec(text))) out.fechas.push({fecha:m[0].replace(/\s+/g," "), que:sentenceOf(text, m.index), i:m.index});
+  const reRel = /\b(antes del?|hasta el|el)\s+(\d{1,2})\b(?!\s*(?:de\b|d'|[\/\-]\d|[.,]\d|%|€|m\b|m2|h\b|eur))/gi;
+  while((m = reRel.exec(text))) if(+m[2] <= 31 && /antes|hasta/i.test(m[1])) out.fechas.push({fecha:"día " + m[2], que:sentenceOf(text, m.index), i:m.index});
+  out.fechas = uniqBy(out.fechas.sort((a,b)=>a.i-b.i), f => f.fecha.toLowerCase());
+  // importes
+  const reEur = /(\d{1,3}(?:[.\s]\d{3})+(?:,\d{1,2})?|\d+(?:[.,]\d{1,2})?)\s?(€|euros?|eur\b)/gi;
+  while((m = reEur.exec(text))) out.importes.push({valor:m[1].trim()+" €", que:sentenceOf(text, m.index)});
+  const rePct = /\b\d+(?:,\d+)?\s?%/g;
+  while((m = rePct.exec(text))) out.importes.push({valor:m[0], que:sentenceOf(text, m.index)});
+  out.importes = uniqBy(out.importes, x => x.valor);
+  // contactos
+  for(const e of text.match(/[\w.+-]+@[\w-]+\.[\w.-]+/g) || []) out.contactos.push({campo:"Correo", valor:e});
+  for(const t of text.match(/(?:\+34[\s.]?)?\b[6789]\d{2}[\s.]?\d{2,3}[\s.]?\d{2,3}[\s.]?\d{0,3}\b/g) || []){
+    const d = t.replace(/\D/g,"").replace(/^34/,""); if(d.length === 9) out.contactos.push({campo:"Teléfono", valor:d.replace(/(\d{3})(\d{3})(\d{3})/,"$1 $2 $3")});
+  }
+  for(const u of text.match(/\bhttps?:\/\/\S+|\bwww\.\S+/g) || []) out.contactos.push({campo:"Web", valor:u.replace(/[.,)]+$/,"")});
+  for(const i of text.match(/\bES\d{2}(?:\s?\d{4}){5}\b/g) || []) out.contactos.push({campo:"IBAN", valor:i});
+  for(const n of text.match(/\b(?:\d{8}[A-Z]|[XYZ]\d{7}[A-Z]|[ABCDEFGHJNPQRSUVW]\d{7}[0-9A-J])\b/g) || []) out.contactos.push({campo:"NIF/CIF", valor:n});
+  const reDir = /\b(?:c\/|calle|carrer|avda\.?|avenida|av\.|plaza|plaça|passeig|paseo)\s+[^,.\n]{3,40}(?:,?\s*\d+[^,.\n]{0,10})?/gi;
+  while((m = reDir.exec(text))) out.contactos.push({campo:"Dirección", valor:m[0].trim()});
+  out.contactos = uniqBy(out.contactos, x => x.campo + x.valor);
+  // nombres y empresas: grupos de palabras con mayúscula
+  const reNom = /\b([A-ZÁÉÍÓÚÑÀÈÒÇ][\p{L}'’]+(?:\s+(?:de|del|d['’]|i|y|la)?\s*[A-ZÁÉÍÓÚÑÀÈÒÇ][\p{L}'’.]+){1,4})/gu;
+  while((m = reNom.exec(text))){
+    const n = m[1].trim(); const first = n.split(/\s+/)[0].toLowerCase();
+    if(STOP.has(first) || MESES.includes(first) || /^(Os|Les|Hola|Buenos|Buenas|Gracias|También|Correo|Contacto)$/i.test(first)) continue;
+    out.nombres.push(n);
+  }
+  for(const re of [/(?:contacto|atentamente|firmado|fdo\.?|sr\.?|sra\.?|d\.|dña\.?)\s*:?\s*([A-ZÁÉÍÓÚÑ][\p{L}]+(?:\s+[A-ZÁÉÍÓÚÑ][\p{L}]+){0,2})/giu])
+    while((m = re.exec(text))) out.nombres.unshift(m[1]);
+  out.nombres = uniqBy(out.nombres, x => x.toLowerCase()).slice(0, 8);
+  // qué hay que hacer
+  const sents = sentences(text);
+  const reAcc = /\b(hay que|habría que|habria que|tiene que|tienen que|debe|deberá|deben|necesit\w*|urgente|cuanto antes|lo antes posible|antes del?|plazo|pagar|abonar|enviar|entregar|revisar|llamar|contactar|pedimos|solicit\w*|por favor|os agradecer\w*|nos gustaría|recordad|recuerda|cal |caldrà|heu de)\b/i;
+  out.acciones = sents.filter(s => reAcc.test(s)).slice(0, 6);
+  // resumen: frases con más palabras importantes
+  const freq = {};
+  for(const w of text.toLowerCase().match(/\p{L}{4,}/gu) || []) if(!STOP.has(w)) freq[w] = (freq[w]||0) + 1;
+  const scored = sents.map((s,i) => {
+    const ws = s.toLowerCase().match(/\p{L}{4,}/gu) || [];
+    let sc = ws.reduce((a,w) => a + (freq[w]||0), 0) / Math.pow(ws.length || 1, .4);
+    if(/\d/.test(s)) sc *= 1.2; if(i === 0) sc *= 1.4;
+    return {s, i, sc};
+  });
+  const nRes = Math.max(Math.min(3, sents.length), Math.min(7, Math.round(sents.length*0.4)));
+  out.resumen = scored.slice().sort((a,b)=>b.sc-a.sc).slice(0, nRes).sort((a,b)=>a.i-b.i).map(x=>x.s).join(" ");
+  // idea principal de cada párrafo
+  const parrafos = text.split(/\n\s*\n|\n(?=[A-ZÁÉÍÓÚÑ0-9•\-–*])/).map(p=>p.trim()).filter(p=>p.length > 40);
+  const best = p => sentences(p).map(s => ({s, sc: scored.find(x=>x.s===s)?.sc ?? 0})).sort((a,b)=>b.sc-a.sc)[0]?.s;
+  out.ideas = parrafos.length > 1 ? parrafos.slice(0, 10).map(best).filter(Boolean) : sents.length > nRes + 2 ? sents.filter(s => !out.resumen.includes(s)).filter(s => /\d|\b(importante|además|también|pero|sin embargo|condici|requisit|incluye|no incluye)\b/i.test(s)).slice(0, 6) : [];
+  // cantidades y medidas
+  out.cantidades = [];
+  const reCant = /\b\d+(?:[.,]\d+)?\s?(?:m2|m²|m3|metros?(?: cuadrados)?|km|cm|mm|horas?|h\b|días?|semanas?|meses|años?|kg|kilos?|litros?|l\b|unidades|uds?\b|veces|personas|plantas|habitaciones|pisos|viviendas|apartamentos|puertas|ventanas)/gi;
+  while((m = reCant.exec(text))) out.cantidades.push({valor:m[0], que:sentenceOf(text, m.index)});
+  for(const w of text.match(/\b(?:dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|una|un) (?:veces|vez) (?:a la|al|por) (?:semana|mes|día|año)\b/gi) || []) out.cantidades.push({valor:w, que:sentenceOf(text, text.indexOf(w))});
+  out.cantidades = uniqBy(out.cantidades, x => x.valor.toLowerCase()).slice(0, 12);
+  const nPal = (text.match(/\p{L}+/gu) || []).length;
+  out.stats = `${nPal} palabras · ${sents.length} frases · ${Math.max(1, Math.round(nPal/200))} min de lectura`;
+  // tipo de documento
+  const tipos = [["factura","Factura"],["presupuesto","Petición o presupuesto"],["contrato","Contrato"],["acta","Acta"],["albarán","Albarán"],["nómina","Nómina"],["comunidad","Comunicado de comunidad"],["correo|email|asunto","Correo"],["aviso|notificación|requerimiento","Notificación"]];
+  const low = text.toLowerCase();
+  for(const [k,v] of tipos) if(new RegExp(k).test(low)){ out.titulo = v; break; }
+  const firstLine = text.trim().split("\n")[0].trim();
+  if(firstLine.length > 4 && firstLine.length < 70 && !/[.:]$/.test(firstLine)) out.titulo = firstLine;
+  out.palabras = Object.entries(freq).filter(([w,n]) => n > 1 || w.length > 7).sort((a,b)=>b[1]-a[1]).slice(0,10).map(x=>x[0]);
+  return out;
+}
+
+const drop = $("#drop");
+$("#r-pick").onclick = () => $("#r-file").click();
+$("#r-file").onchange = e => e.target.files[0] && loadFile(e.target.files[0]);
+["dragover","dragenter"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave","drop"].forEach(t => drop.addEventListener(t, e => { e.preventDefault(); drop.classList.remove("over"); }));
+addEventListener("drop", e => {
+  e.preventDefault(); drop.classList.remove("over");
+  const f = e.dataTransfer?.files?.[0]; if(!f) return;
+  location.hash = "resumen"; loadFile(f);
+  Spider.say("¡Me lo quedo! Pulsa «Buscar lo importante».", 3500); Spider.goHome();
+});
+
+async function loadFile(file){
+  const st = $("#r-status"); st.className = "status";
+  $("#r-fname").textContent = file.name;
+  try{
+    if(file.type.startsWith("image/")){
+      st.className = "status err";
+      st.textContent = "La araña no lee fotos. En el móvil, abre la foto, mantén pulsado el texto para copiarlo (o usa Google Lens) y pégalo aquí.";
+    } else if(file.type === "application/pdf" || /\.pdf$/i.test(file.name)){
+      st.textContent = "Leyendo el PDF…";
+      const lib = window.pdfjsLib;
+      if(!lib) throw new Error("pdf");
+      lib.GlobalWorkerOptions.workerSrc = "lib/pdf.worker.min.js";
+      const pdf = await lib.getDocument({data: await file.arrayBuffer()}).promise;
+      const out = [];
+      for(let i=1;i<=Math.min(pdf.numPages,60);i++){
+        const tc = await (await pdf.getPage(i)).getTextContent();
+        out.push(tc.items.map(x=>x.str + (x.hasEOL ? "\n" : " ")).join(""));
+      }
+      const txt = out.join("\n\n").trim();
+      if(!txt){ st.className="status err"; st.textContent = "Este PDF es una imagen escaneada y no tiene texto. Copia el texto con Google Lens y pégalo aquí."; return; }
+      $("#r-text").value = txt;
+      st.textContent = `PDF leído: ${pdf.numPages} página(s). Pulsa «Buscar lo importante».`;
+    } else {
+      $("#r-text").value = await file.text();
+      st.textContent = "Archivo cargado. Pulsa «Buscar lo importante».";
+    }
+  }catch(err){ st.className="status err"; st.textContent = "No se pudo leer el archivo. Copia y pega el texto en el cuadro."; }
+}
+
+$("#f-resumen").onsubmit = async e => {
+  e.preventDefault();
+  const text = $("#r-text").value.trim(), st = $("#r-status");
+  if(!text){ st.className="status err"; st.textContent = "Pega un texto o sube un archivo primero."; return; }
+  st.className = "status"; st.textContent = "";
+  const d = analizar(text);
+  const crumbs = [...d.fechas.map(x=>x.fecha), ...d.importes.map(x=>x.valor), ...d.nombres, ...d.contactos.map(x=>x.valor)];
+  $("#r-go").disabled = true;
+  await Spider.work(crumbs.length ? crumbs : d.palabras, $("#r-text"), Promise.resolve());
+  renderResumen(d); $("#r-go").disabled = false;
+  Spider.deliver($("#r-out"));
+};
+
+function renderResumen(d, example){
+  const list = a => a.length ? "<ul>"+a.map(x=>`<li>${esc(x)}</li>`).join("")+"</ul>" : "<p class='note'>No he encontrado nada.</p>";
+  const kv = (a, k, v) => `<dl class="kv">${a.map(x=>`<dt>${esc(x[k])}</dt><dd>${esc(x[v])}</dd>`).join("")}</dl>`;
+  $("#r-out").innerHTML = `<article class="sheet">
+    <h2>${esc(d.titulo)} ${example?'<span class="tag">Ejemplo</span>':''}</h2>
+    <p class="note">${esc(d.stats)}</p>
+    <div><h3>Resumen</h3><p style="margin:0">${esc(d.resumen)}</p></div>
+    ${d.ideas.length?`<div><h3>Otras ideas importantes</h3>${list(d.ideas)}</div>`:""}
+    ${d.palabras.length?`<div><h3>Palabras clave</h3><div class="chips">${d.palabras.map(w=>`<span class="chip">${esc(w)}</span>`).join("")}</div></div>`:""}
+    <div><h3>Fechas</h3>${d.fechas.length ? kv(d.fechas,"fecha","que") : "<p class='note'>No he encontrado fechas.</p>"}</div>
+    ${d.importes.length?`<div><h3>Importes</h3>${kv(d.importes,"valor","que")}</div>`:""}
+    ${d.cantidades.length?`<div><h3>Cantidades y medidas</h3>${kv(d.cantidades,"valor","que")}</div>`:""}
+    ${d.nombres.length?`<div><h3>Personas, empresas y lugares</h3>${list(d.nombres)}</div>`:""}
+    ${d.contactos.length?`<div><h3>Contacto</h3>${kv(d.contactos,"campo","valor")}</div>`:""}
+    <div><h3>Qué hay que hacer</h3>${list(d.acciones)}</div>
+    <div class="actions"><button type="button" id="r-copy">Copiar</button><span class="status" id="r-cst"></span></div>
+  </article>`;
+  $("#r-copy").onclick = () => copy(
+    `${d.titulo}\n\n${d.resumen}\n\n${d.ideas.length ? "Otras ideas:\n" + d.ideas.map(x=>"- "+x).join("\n") + "\n\n" : ""}Fechas:\n${d.fechas.map(x=>`- ${x.fecha}: ${x.que}`).join("\n")}\n\nImportes:\n${d.importes.map(x=>`- ${x.valor}: ${x.que}`).join("\n")}\n\nPersonas, empresas y lugares:\n${d.nombres.map(x=>"- "+x).join("\n")}\n\nContacto:\n${d.contactos.map(x=>`- ${x.campo}: ${x.valor}`).join("\n")}\n\nQué hay que hacer:\n${d.acciones.map(x=>"- "+x).join("\n")}`,
+    $("#r-cst"));
+}
+
+/* ---------- MODO 2: presupuestos con la tarifa de la empresa ---------- */
+const TARIFA_BASE = [
+  {servicio:"Pintura de paredes interiores (2 manos)", claves:"pint pared salón habitaci dormitor", unidad:"m2", precio:7},
+  {servicio:"Pintura de techos", claves:"techo", unidad:"m2", precio:7.5},
+  {servicio:"Pintura exterior, terraza o fachada", claves:"terraza fachada exterior balcón", unidad:"m2", precio:10},
+  {servicio:"Reparación de grietas y desconchados", claves:"griet fisur desconch masilla agujer", unidad:"h", precio:28},
+  {servicio:"Protección de suelos y muebles", claves:"proteg tapar mueble", unidad:"global", precio:60},
+  {servicio:"Limpieza", claves:"limpi", unidad:"h", precio:18},
+  {servicio:"Jardinería y poda", claves:"jardín jardin poda seto césped cesped plantas riego", unidad:"h", precio:25},
+  {servicio:"Mantenimiento de piscina", claves:"piscin", unidad:"visita", precio:45},
+  {servicio:"Fontanería", claves:"fontan grifo tuber gotera fuga cisterna desagüe atasc", unidad:"h", precio:35},
+  {servicio:"Electricidad", claves:"eléctr electr enchuf bombill interruptor lámpara luz", unidad:"h", precio:35},
+  {servicio:"Pequeñas reparaciones y montaje", claves:"repar arregl montaj montar persian puerta cerradura estanter", unidad:"h", precio:28},
+  {servicio:"Desplazamiento", claves:"*", unidad:"global", precio:20},
+];
+let tarifa = store.get("arana-tarifa", null) || TARIFA_BASE.map(x=>({...x}));
+function renderTarifa(){
+  $("#tarifa-rows").innerHTML = tarifa.map((t,i)=>`<tr data-i="${i}">
+    <td><input class="c" id="ts${i}" data-k="servicio" value="${esc(t.servicio)}"></td>
+    <td><input id="tk${i}" data-k="claves" value="${esc(t.claves)}" style="min-width:160px"></td>
+    <td><input id="tu${i}" data-k="unidad" value="${esc(t.unidad)}" style="width:70px"></td>
+    <td class="num"><input class="n" id="tp${i}" data-k="precio" type="number" step="any" value="${t.precio}"></td>
+    <td><button type="button" class="del" data-del="${i}" aria-label="Quitar servicio">×</button></td></tr>`).join("");
+}
+renderTarifa();
+$("#tarifa-rows").oninput = e => {
+  const i = +e.target.closest("tr").dataset.i, k = e.target.dataset.k;
+  tarifa[i][k] = k === "precio" ? (parseFloat(e.target.value)||0) : e.target.value;
+  store.set("arana-tarifa", tarifa); $("#tarifa-st").textContent = "Guardado en este móvil.";
+};
+$("#tarifa-rows").onclick = e => { const d = e.target.dataset.del; if(d!==undefined){ tarifa.splice(+d,1); store.set("arana-tarifa", tarifa); renderTarifa(); } };
+$("#tarifa-add").onclick = () => { tarifa.push({servicio:"Nuevo servicio",claves:"",unidad:"h",precio:0}); store.set("arana-tarifa", tarifa); renderTarifa(); };
+$("#tarifa-reset").onclick = () => { tarifa = TARIFA_BASE.map(x=>({...x})); store.set("arana-tarifa", tarifa); renderTarifa(); $("#tarifa-st").textContent = "Tarifa original restaurada."; };
+
+function num(s){ return parseFloat(String(s).replace(",", ".")); }
+function cantidadPara(t, text, sent){
+  const area = text.match(/(\d+(?:[.,]\d+)?)\s?(?:m2|m²|metros cuadrados|metros)/i);
+  const near = re => (sent.match(re) || text.match(re));
+  if(t.unidad === "m2"){
+    const own = sent.match(/(\d+(?:[.,]\d+)?)\s?(?:m2|m²|metros)/i);
+    if(own && (!area || num(own[1]) !== num(area[1]))) return {q:num(own[1]), est:false};
+    if(area){
+      const a = num(area[1]);
+      if(/pared/i.test(t.servicio)) return {q:Math.round(a*2.6), est:true};
+      if(/exterior|terraza|fachada/i.test(t.servicio)) return {q:Math.round(a*0.25), est:true};
+      return {q:a, est:false};
+    }
+    return {q:10, est:true};
+  }
+  if(t.unidad === "h"){ const h = near(/(\d+(?:[.,]\d+)?)\s?(?:h\b|horas?)/i); return h ? {q:num(h[1]), est:false} : {q:2, est:true}; }
+  if(t.unidad === "visita"){ const v = near(/(\d+)\s?(?:visitas?|veces)/i); return v ? {q:+v[1], est:false} : {q:1, est:true}; }
+  if(t.unidad === "ud"){ const u = near(/(\d+)\s?(?:unidades|uds?\.?|piezas)/i); return u ? {q:+u[1], est:false} : {q:1, est:true}; }
+  return {q:1, est:false};
+}
+function presupuestar(desc){
+  const sents = sentences(desc), low = desc.toLowerCase(), partidas = [];
+  for(const t of tarifa){
+    const claves = t.claves.toLowerCase().split(/[\s,]+/).filter(Boolean);
+    if(claves.includes("*")){ continue; }
+    const hit = claves.find(k => low.includes(k));
+    if(!hit) continue;
+    const sent = sents.find(s => s.toLowerCase().includes(hit)) || desc;
+    const {q, est} = cantidadPara(t, desc, sent);
+    partidas.push({concepto:t.servicio, cantidad:q, unidad:t.unidad, precio:t.precio, est});
+  }
+  for(const t of tarifa) if(t.claves.trim() === "*") partidas.push({concepto:t.servicio, cantidad:1, unidad:t.unidad, precio:t.precio, est:false});
+  const titulo = (sents[0] || "Presupuesto").replace(/[.:]$/,"");
+  return {titulo: titulo.length > 70 ? titulo.slice(0,67)+"…" : titulo, partidas, notas:["Precios sin IVA","Las cantidades marcadas con * son estimadas: revísalas"], validez:30};
+}
+
+let pres = null;
+$("#f-pres").onsubmit = async e => {
+  e.preventDefault();
+  const st = $("#p-status"), desc = $("#p-desc").value.trim();
+  if(!desc){ st.className="status err"; st.textContent="Describe el trabajo primero."; return; }
+  st.className = "status"; st.textContent = "";
+  pres = presupuestar(desc);
+  if(!pres.partidas.filter(p=>p.concepto!=="Desplazamiento").length){
+    st.className = "status err"; st.textContent = "No he reconocido ningún servicio de la tarifa. Añade partidas a mano o amplía las palabras clave de la tarifa.";
+  }
+  $("#p-go").disabled = true;
+  await Spider.work(pres.partidas.map(p=>p.concepto.split(" ").slice(0,2).join(" ")), $("#p-desc"), Promise.resolve());
+  $("#p-go").disabled = false;
+  renderPres(); Spider.deliver($("#p-out"), "¡Presupuesto listo! Revisa las cantidades.");
+};
+$("#p-iva").onchange = () => pres && renderTotals();
+
+function renderPres(){
+  const today = new Date().toLocaleDateString("es-ES");
+  $("#p-out").innerHTML = `<article class="sheet">
+    <h2>${esc(pres.titulo)} ${pres.ejemplo?'<span class="tag">Ejemplo</span>':''}</h2>
+    <dl class="kv"><dt>De</dt><dd>${esc($("#p-emisor").value)}</dd><dt>Para</dt><dd>${esc($("#p-cliente").value)}</dd><dt>Fecha</dt><dd>${today}</dd><dt>Válido</dt><dd>${pres.validez} días</dd></dl>
+    <div class="tablewrap"><table><thead><tr><th>Concepto</th><th class="num">Cant.</th><th>Ud.</th><th class="num">Precio</th><th class="num">Importe</th><th></th></tr></thead>
+    <tbody id="p-rows">${pres.partidas.map((p,i)=>`<tr data-i="${i}">
+      <td><input class="c" id="pc${i}" data-k="concepto" value="${esc(p.concepto)}"></td>
+      <td class="num"><input class="n" id="pq${i}" data-k="cantidad" type="number" step="any" value="${p.cantidad}">${p.est?' *':''}</td>
+      <td><input id="pu${i}" data-k="unidad" value="${esc(p.unidad)}" style="width:70px"></td>
+      <td class="num"><input class="n" id="pp${i}" data-k="precio" type="number" step="any" value="${p.precio}"></td>
+      <td class="num" data-imp>${eur(p.cantidad*p.precio)}</td>
+      <td><button type="button" class="del" data-del="${i}" aria-label="Quitar partida">×</button></td></tr>`).join("")}</tbody></table></div>
+    <div class="actions"><button type="button" id="p-add">Añadir partida</button></div>
+    <div class="totals" id="p-tot"></div>
+    ${pres.notas.length?`<div><h3>Condiciones</h3><ul>${pres.notas.map(n=>`<li>${esc(n)}</li>`).join("")}</ul></div>`:""}
+    <div class="actions"><button type="button" id="p-copy">Copiar presupuesto</button><span class="status" id="p-cst"></span></div>
+  </article>`;
+  renderTotals();
+  $("#p-rows").oninput = e => {
+    const tr = e.target.closest("tr"), i = +tr.dataset.i, k = e.target.dataset.k;
+    pres.partidas[i][k] = (k==="cantidad"||k==="precio") ? (parseFloat(e.target.value)||0) : e.target.value;
+    tr.querySelector("[data-imp]").textContent = eur(pres.partidas[i].cantidad*pres.partidas[i].precio);
+    renderTotals();
+  };
+  $("#p-rows").onclick = e => { const d = e.target.dataset.del; if(d!==undefined){ pres.partidas.splice(+d,1); renderPres(); } };
+  $("#p-add").onclick = () => { pres.partidas.push({concepto:"Nueva partida",cantidad:1,unidad:"ud",precio:0}); renderPres(); };
+  $("#p-copy").onclick = () => copy(presText(), $("#p-cst"));
+}
+function sums(){
+  const base = pres.partidas.reduce((s,p)=>s+p.cantidad*p.precio,0), iva = +$("#p-iva").value;
+  return {base, iva, cuota: base*iva/100, total: base*(1+iva/100)};
+}
+function renderTotals(){
+  const s = sums();
+  $("#p-tot").innerHTML = `<span>Base imponible</span><span class="v">${eur(s.base)}</span><span>IVA ${s.iva} %</span><span class="v">${eur(s.cuota)}</span><span class="big">Total</span><span class="bigv">${eur(s.total)}</span>`;
+}
+function presText(){
+  const s = sums();
+  return `${pres.titulo.toUpperCase()}\nDe: ${$("#p-emisor").value}\nPara: ${$("#p-cliente").value}\nFecha: ${new Date().toLocaleDateString("es-ES")}\n\n`
+    + pres.partidas.map(p=>`- ${p.concepto}: ${p.cantidad} ${p.unidad} x ${eur(p.precio)} = ${eur(p.cantidad*p.precio)}`).join("\n")
+    + `\n\nBase imponible: ${eur(s.base)}\nIVA ${s.iva} %: ${eur(s.cuota)}\nTOTAL: ${eur(s.total)}\n\n`
+    + (pres.notas.length ? "Condiciones:\n"+pres.notas.map(n=>"- "+n).join("\n")+"\n" : "")
+    + `Presupuesto válido ${pres.validez} días.`;
+}
+
+/* ---------- MODO 3: tiendas en el mapa ---------- */
+const CATEGORIAS = [
+  {tipo:"Tienda de piscinas", claves:"cloro piscina ph algicida floculante skimmer depuradora", shops:"swimming_pool|hardware|doityourself"},
+  {tipo:"Vivero o jardinería", claves:"cortasetos seto semilla abono manguera planta césped cesped tierra maceta riego podadora desbrozadora", shops:"garden_centre|agrarian|doityourself"},
+  {tipo:"Material eléctrico", claves:"bombilla led cable enchufe interruptor lámpara lampara foco regleta", shops:"electrical|lighting|hardware|doityourself"},
+  {tipo:"Fontanería y baño", claves:"grifo tubo sifón sifon cisterna latiguillo inodoro fregadero ducha válvula valvula", shops:"bathroom_furnishing|plumbing|hardware|doityourself"},
+  {tipo:"Pinturas", claves:"pintura esmalte barniz imprimación rodillo brocha", shops:"paint|hardware|doityourself"},
+  {tipo:"Droguería y limpieza", claves:"lejía lejia detergente fregona limpiador amoniaco bayeta friegasuelos", shops:"chemist|household|supermarket|hardware"},
+  {tipo:"Ferretería o bricolaje", claves:"", shops:"hardware|doityourself|trade"},
+];
+const NOMBRE_TIPO = {hardware:"Ferretería", doityourself:"Bricolaje", swimming_pool:"Piscinas", garden_centre:"Vivero", agrarian:"Agrícola", electrical:"Material eléctrico", lighting:"Iluminación", bathroom_furnishing:"Baño", plumbing:"Fontanería", paint:"Pinturas", chemist:"Droguería", household:"Hogar", supermarket:"Supermercado", trade:"Almacén profesional"};
+const categoria = p => { const low = p.toLowerCase(); return CATEGORIAS.find(c => c.claves && c.claves.split(" ").some(k => low.includes(k))) || CATEGORIAS[CATEGORIAS.length-1]; };
+
+let map = null, capa = null, yo = null, centro = {lat:41.8178, lon:3.0668, nombre:"Platja d'Aro"};
+function iniciarMapa(){
+  if(map || !window.L) return;
+  map = L.map("map", {scrollWheelZoom:false}).setView([centro.lat, centro.lon], 13);
+  L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", {maxZoom:19, attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'}).addTo(map);
+  capa = L.layerGroup().addTo(map);
+}
+function distancia(a, b){
+  const R = 6371000, r = x => x*Math.PI/180;
+  const dLat = r(b.lat-a.lat), dLon = r(b.lon-a.lon);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat))*Math.cos(r(b.lat))*Math.sin(dLon/2)**2;
+  return 2*R*Math.asin(Math.sqrt(h));
+}
+const km = m => m < 1000 ? Math.round(m/10)*10 + " m" : (m/1000).toFixed(1).replace(".", ",") + " km";
+
+async function geocodificar(texto){
+  const cache = store.get("arana-geo", {});
+  if(cache[texto]) return cache[texto];
+  const r = await fetch("https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=es&accept-language=es&q=" + encodeURIComponent(texto));
+  const j = await r.json();
+  if(!j.length) throw new Error("zona");
+  const c = {lat:+j[0].lat, lon:+j[0].lon, nombre:texto};
+  cache[texto] = c; store.set("arana-geo", cache);
+  return c;
+}
+async function buscarTiendas(cat, c, radio){
+  const q = `[out:json][timeout:25];nwr["shop"~"^(${cat.shops})$"](around:${radio},${c.lat},${c.lon});out center tags 120;`;
+  const servidores = ["https://overpass-api.de/api/interpreter", "https://overpass.kumi.systems/api/interpreter"];
+  let ultimo;
+  for(const s of servidores){
+    try{
+      const r = await fetch(s, {method:"POST", body:"data=" + encodeURIComponent(q), headers:{"Content-Type":"application/x-www-form-urlencoded"}});
+      if(!r.ok) throw new Error("http " + r.status);
+      const j = await r.json();
+      return j.elements.map(e => {
+        const t = e.tags || {}, lat = e.lat ?? e.center?.lat, lon = e.lon ?? e.center?.lon;
+        const dir = [t["addr:street"] && (t["addr:street"] + (t["addr:housenumber"] ? " " + t["addr:housenumber"] : "")), t["addr:city"] || t["addr:place"]].filter(Boolean).join(", ");
+        return {lat, lon, nombre: t.name || t.brand || (NOMBRE_TIPO[t.shop] || "Tienda") + " sin nombre", tipo: NOMBRE_TIPO[t.shop] || t.shop, dir,
+          horario: t.opening_hours ? horarioEs(t.opening_hours) : "", tel: t.phone || t["contact:phone"] || "", web: t.website || t["contact:website"] || "",
+          d: distancia(c, {lat, lon}), conNombre: !!(t.name || t.brand)};
+      }).filter(x => x.lat && x.lon).sort((a,b) => a.d - b.d);
+    }catch(err){ ultimo = err; }
+  }
+  throw ultimo;
+}
+const horarioEs = h => h.replace(/\bMo\b/g,"lu").replace(/\bTu\b/g,"ma").replace(/\bWe\b/g,"mi").replace(/\bTh\b/g,"ju").replace(/\bFr\b/g,"vi").replace(/\bSa\b/g,"sá").replace(/\bSu\b/g,"do").replace(/\bPH\b/g,"festivos").replace(/\boff\b/g,"cerrado").replace(/;\s*/g,"; ");
+const dirUrl = t => `https://www.google.com/maps/dir/?api=1&destination=${t.lat},${t.lon}`;
+function pintarTiendas(lista, c, cat, prod){
+  iniciarMapa(); if(!map) return;
+  capa.clearLayers();
+  const css = getComputedStyle(document.documentElement);
+  const acc = css.getPropertyValue("--accent").trim(), mark = css.getPropertyValue("--mark").trim();
+  L.circleMarker([c.lat, c.lon], {radius:7, color:mark, fillColor:mark, fillOpacity:.9}).addTo(capa).bindPopup(yo ? "Estás aquí" : esc(c.nombre));
+  const pts = [[c.lat, c.lon]];
+  lista.forEach((t, i) => {
+    const m = L.circleMarker([t.lat, t.lon], {radius:8, color:acc, weight:2, fillColor:acc, fillOpacity:.75}).addTo(capa);
+    m.bindPopup(`<strong>${esc(t.nombre)}</strong><br>${esc(t.tipo)} · ${km(t.d)}${t.dir ? "<br>" + esc(t.dir) : ""}${t.horario ? "<br>Horario: " + esc(t.horario) : ""}${t.tel ? "<br>Tel.: " + esc(t.tel) : ""}<br><a href="${dirUrl(t)}" target="_blank" rel="noopener">Cómo llegar</a>`);
+    t.marker = m; pts.push([t.lat, t.lon]);
+  });
+  if(pts.length > 1) map.fitBounds(pts, {padding:[30,30], maxZoom:15}); else map.setView([c.lat, c.lon], 13);
+  $("#t-head").innerHTML = `<h2>${lista.length ? lista.length + " tiendas cerca" : "No hay tiendas de este tipo cerca"}</h2>
+    <p class="note">${esc(cat.tipo)} para «${esc(prod)}» alrededor de ${esc(c.nombre)}. ${lista.length ? "Toca una tienda para verla en el mapa." : "Prueba con más distancia o búscalo en internet."}</p>`;
+  $("#t-lista").innerHTML = lista.slice(0, 30).map((t, i) => `<li data-i="${i}">
+      <div class="sh-top"><strong>${esc(t.nombre)}</strong><span class="dist">${km(t.d)}</span></div>
+      <div class="note">${esc(t.tipo)}${t.dir ? " · " + esc(t.dir) : ""}</div>
+      ${t.horario ? `<div class="note">Horario: ${esc(t.horario)}</div>` : ""}
+      <div class="maps"><a href="${dirUrl(t)}" target="_blank" rel="noopener">Cómo llegar</a>${t.tel ? `<a href="tel:${esc(t.tel.replace(/\s/g,""))}">Llamar ${esc(t.tel)}</a>` : ""}${t.web ? `<a href="${esc(t.web)}" target="_blank" rel="noopener">Web</a>` : ""}</div>
+    </li>`).join("");
+  $("#t-lista").onclick = e => {
+    if(e.target.closest("a")) return;
+    const li = e.target.closest("li"); if(!li) return;
+    const t = lista[+li.dataset.i];
+    $("#map").scrollIntoView({behavior:"smooth", block:"center"});
+    map.setView([t.lat, t.lon], 16); t.marker.openPopup();
+  };
+  const z = c.nombre && !yo ? " " + c.nombre : "";
+  const web = [
+    ["Comparar precios (Google Shopping)", "https://www.google.com/search?tbm=shop&q=" + encodeURIComponent(prod)],
+    ["Amazon", "https://www.amazon.es/s?k=" + encodeURIComponent(prod)],
+    ["Leroy Merlin", "https://www.leroymerlin.es/search?q=" + encodeURIComponent(prod)],
+    ["Buscar en Google", "https://www.google.com/search?q=" + encodeURIComponent("comprar " + prod + z)],
+  ];
+  $("#t-web").innerHTML = web.map(([n,u]) => `<a href="${esc(u)}" target="_blank" rel="noopener">${esc(n)}</a>`).join("");
+}
+
+$("#t-gps").onclick = () => {
+  const st = $("#t-status");
+  if(!navigator.geolocation){ st.className = "status err"; st.textContent = "Este navegador no da la ubicación. Escribe tu pueblo."; return; }
+  st.className = "status"; st.textContent = "Buscando dónde estás…";
+  navigator.geolocation.getCurrentPosition(p => {
+    yo = {lat:p.coords.latitude, lon:p.coords.longitude, nombre:"tu ubicación"};
+    $("#t-zona").value = "Mi ubicación"; st.textContent = "Ubicación encontrada.";
+    $("#f-tiendas").requestSubmit();
+  }, () => { st.className = "status err"; st.textContent = "No has dado permiso de ubicación. Escribe tu pueblo en «Dónde»."; }, {enableHighAccuracy:true, timeout:10000});
+};
+$("#t-zona").addEventListener("input", () => { yo = null; });
+
+$("#f-tiendas").onsubmit = async e => {
+  e.preventDefault();
+  const st = $("#t-status"), prod = $("#t-prod").value.trim(), zona = $("#t-zona").value.trim(), radio = +$("#t-radio").value;
+  if(!prod){ st.className = "status err"; st.textContent = "Escribe qué necesitas."; return; }
+  st.className = "status"; st.textContent = "La araña está buscando…";
+  $("#t-go").disabled = true;
+  const cat = categoria(prod);
+  const trabajo = (async () => {
+    const c = yo || await geocodificar(zona || "Platja d'Aro");
+    return {c, lista: await buscarTiendas(cat, c, radio)};
+  })();
+  Spider.work([prod.split(" ").slice(0,2).join(" "), cat.tipo.split(" ")[0], zona.split(",")[0]], $("#t-prod"), trabajo);
+  try{
+    const {c, lista} = await trabajo;
+    centro = c; st.textContent = "";
+    pintarTiendas(lista, c, cat, prod);
+    Spider.deliver($("#t-res"), lista.length ? "¡Mira cuántas tiendas te he encontrado!" : "Aquí no hay, prueba más lejos.");
+  }catch(err){
+    st.className = "status err";
+    st.textContent = err.message === "zona" ? "No encuentro ese sitio. Escribe el pueblo, por ejemplo «Platja d'Aro» o «Calonge»." : "No he podido cargar las tiendas. Revisa la conexión a internet y vuelve a probar.";
+    Spider.fail();
+  }finally{ $("#t-go").disabled = false; }
+};
+
+/* ---------- copiar ---------- */
+async function copy(text, st){
+  try{ await navigator.clipboard.writeText(text); st.textContent = "Copiado."; }
+  catch{ const ta = document.createElement("textarea"); ta.value = text; st.replaceChildren(ta); ta.select(); }
+}
+
+/* ---------- ejemplos al abrir ---------- */
+route();
+renderResumen(analizar($("#r-text").value), true);
+pres = presupuestar($("#p-desc").value); pres.ejemplo = true; renderPres();
+</script>
+<script>
+if("serviceWorker" in navigator) addEventListener("load", () => navigator.serviceWorker.register("sw.js").catch(()=>{}));
+</script>
+</body>
+</html>
